@@ -17,7 +17,7 @@ def args_parser():
     parser.add_argument('--num_labeled', type=int, default=1, help='local epoch')
     parser.add_argument('--rounds', type=int, default=200, help='local epoch')
     parser.add_argument('--log_file_name', type=str, default=None, help='The log file name')
-    parser.add_argument('--logdir', type=str, default='logs/', help='The log file name')
+    parser.add_argument('--logdir', type=str, default='./logs/', help='The log file name')
     parser.add_argument('--opt', type=str, default='sgd', help='sgd or adam or adamw')
     parser.add_argument('--beta', type=float, default=0.5,
                         help='The parameter for the dirichlet distribution for data partitioning')

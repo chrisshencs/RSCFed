@@ -1,9 +1,9 @@
-from validation import epochVal_metrics_test
-from options import args_parser
-import os
-import sys
-import logging
-import random
+from validation import epochVal_metrics_test ## 自己写的validation package 用来衡量实验的效果 
+from options import args_parser ## 载入 config以及配置参数的部分 可以用yaml格式的文件重新写一遍
+import os ## os操作 
+import sys ## 系统组件
+import logging ## log 相关的组件
+import random ## 获取随机数
 import numpy as np
 import copy
 import datetime
@@ -46,46 +46,54 @@ def test(epoch, checkpoint, data_test, label_test, n_classes):
                                           args.dataset, args.datadir, args.batch_size,
                                           is_labeled=True, is_testing=True, pre_sz=args.pre_sz, input_sz=args.input_sz)
 
-    AUROCs, Accus = epochVal_metrics_test(model, test_dl, args.model, thresh=0.4, n_classes=n_classes)
+    AUROCs, Accus = epochVal_metrics_test(model, test_dl, args.model, n_classes=n_classes)
+    # AUROCs, Accus = epochVal_metrics_test(model, test_dl, args.model, thresh=0.4, n_classes=n_classes)
     AUROC_avg = np.array(AUROCs).mean()
     Accus_avg = np.array(Accus).mean()
 
     return AUROC_avg, Accus_avg
 
 if __name__ == '__main__':
-    args = args_parser()
+    args = args_parser() ## 传入参数
 
     supervised_user_id = [0]
     unsupervised_user_id = list(range(len(supervised_user_id), args.unsup_num + len(supervised_user_id)))
-    sup_num = len(supervised_user_id)
-    unsup_num = len(unsupervised_user_id)
-    total_num = sup_num + unsup_num
+    sup_num = len(supervised_user_id) ## 有监督的数量
+    unsup_num = len(unsupervised_user_id) ## 无监督的数量 
+    total_num = sup_num + unsup_num ## 全部的数量
 
-    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
-    time_current = 'attempt0'
+    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu ## 使用哪个GPU
+    time_current = 'attempt0' ## 时间线
+
     if args.log_file_name is None:
         args.log_file_name = 'log-%s' % (datetime.datetime.now().strftime("%m-%d-%H%M-%S"))
+
     log_path = args.log_file_name + '.log'
+
     logging.basicConfig(filename=os.path.join(args.logdir, log_path), level=logging.INFO,
-                        format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
-    logger = logging.getLogger()
-    logger.addHandler(logging.StreamHandler(sys.stdout))
-    logger.info(str(args))
-    logger.info(time_current)
-    if args.deterministic:
-        cudnn.benchmark = False
-        cudnn.deterministic = True
+                        format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S') 
+
+    logger = logging.getLogger() ## 实例化我们的logger
+    logger.addHandler(logging.StreamHandler(sys.stdout)) ## 构建能够从consol输出  
+    logger.info(str(args)) ## logging输出我们的args
+    logger.info(time_current) ## 输出我们的进步调
+    ## 写入logger
+    ##########################################################################################
+
+    if args.deterministic: ## 如果是确定的训练方式
+        cudnn.benchmark = False 
+        cudnn.deterministic = True 
         random.seed(args.seed)
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
         torch.cuda.manual_seed(args.seed)
-    if not os.path.isdir('tensorboard'):
-        os.mkdir('tensorboard')
+    if not os.path.isdir('tensorboard'): ## 判断tensorboard是不是目录 如果不是目录 那就新建一个 如果是目录 那就不需要新建了
+        os.mkdir('tensorboard') 
 
     if args.dataset == 'SVHN':
-        if not os.path.isdir('tensorboard/SVHN/' + time_current):
+        if not os.path.isdir('tensorboard/SVHN/' + time_current): ## 如果没有current进程的路径 那我们就新建一个
             os.mkdir('tensorboard/cares_SVHN/' + time_current)
-        writer = SummaryWriter('tensorboard/SVHN/' + time_current)
+        writer = SummaryWriter('tensorboard/SVHN/' + time_current) ## 和tensorboard关联 输出log数据
 
     elif args.dataset == 'cifar100':
         if not os.path.isdir('tensorboard/cifar100/' + time_current):
@@ -97,7 +105,8 @@ if __name__ == '__main__':
             os.mkdir('tensorboard/skin/' + time_current)
         writer = SummaryWriter('tensorboard/skin/' + time_current)
 
-    snapshot_path = 'model/'
+    ## 为存放model 进行model的存放
+    snapshot_path = 'model/' 
     if not os.path.isdir(snapshot_path):
         os.mkdir(snapshot_path)
     if args.dataset == 'SVHN':
@@ -109,32 +118,35 @@ if __name__ == '__main__':
     if not os.path.isdir(snapshot_path):
         os.mkdir(snapshot_path)
 
+    
     print('==> Reloading data partitioning strategy..')
-    assert os.path.isdir('partition_strategy'), 'Error: no partition_strategy directory found!'
+    assert os.path.isdir('partition_strategy'), 'Error: no partition_strategy directory found!' ## 确保partition strategy有的 不然就会报错
 
     if args.dataset == 'SVHN':
-        partition = torch.load('partition_strategy/SVHN_noniid_10%labeled.pth')
+        partition = torch.load('partition_strategy/SVHN_noniid_10%labeled.pth') ## load 一下我们的partition strategy
         net_dataidx_map = partition['data_partition']
     elif args.dataset == 'cifar100':
         partition = torch.load('partition_strategy/cifar100_noniid_10%labeled.pth')
         net_dataidx_map = partition['data_partition']
 
+    ## 进行数据的划分 载入 partition_data_allnoniid
     X_train, y_train, X_test, y_test, _, traindata_cls_counts = partition_data_allnoniid(
         args.dataset, args.datadir, partition=args.partition, n_parties=total_num, beta=args.beta)
 
-    if args.dataset == 'SVHN':
+    if args.dataset == 'SVHN': ## SVHN数据的预处理
         X_train = X_train.transpose([0, 2, 3, 1])
         X_test = X_test.transpose([0, 2, 3, 1])
 
+    ## 设定一共有多少class 可以用于分类的
     if args.dataset == 'cifar10' or args.dataset == 'SVHN':
-        n_classes = 10
+        n_classes = 10 
     elif args.dataset == 'cifar100':
         n_classes = 100
     elif args.dataset == 'skin':
         n_classes = 7
     net_glob = ModelFedCon(args.model, args.out_dim, n_classes=n_classes)
 
-    if args.resume:
+    if args.resume: ## 是否为中断后的重新开始 从checkpoint开始恢复
         print('==> Resuming from checkpoint..')
         if args.dataset == 'cifar100':
             checkpoint = torch.load('warmup/cifar100.pth')
@@ -144,9 +156,9 @@ if __name__ == '__main__':
         net_glob.load_state_dict(checkpoint['state_dict'])
         start_epoch = 7
     else:
-        start_epoch = 0
+        start_epoch = 0 ## 如果不是 直接从第一个epoch开始
 
-    if len(args.gpu.split(',')) > 1:
+    if len(args.gpu.split(',')) > 1:  ## 判断几张gpu在训练 如果是多张GPU在训练 那我们就需要
         net_glob = torch.nn.DataParallel(net_glob, device_ids=[i for i in range(round(len(args.gpu) / 2))])  #
     net_glob.train()
     w_glob = net_glob.state_dict()
